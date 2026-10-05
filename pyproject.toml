@@ -5,6 +5,7 @@ description = "Drive BracketBot's balance and manipulation policies in MuJoCo, n
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "av==19.0.1",
     "glfw==2.10.2",
     "mujoco==3.8.1",
     "numpy==2.5.3",
