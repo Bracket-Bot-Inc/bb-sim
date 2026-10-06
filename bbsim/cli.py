@@ -43,9 +43,15 @@ def main():
 
         sys.argv[:2] = [f"{sys.argv[0]} manipulation"]
         return manipulation()
+    if sys.argv[1:2] == ["replay"]:
+        from .replay import main as replay
+
+        sys.argv[:2] = [f"{sys.argv[0]} replay"]
+        return replay()
     p = argparse.ArgumentParser(
         description="Run a BracketBot policy locally with chopped CAD geometry.",
-        epilog="Run `bbsim manipulation --help` for the fixed-base arm scene.",
+        epilog="Run `bbsim manipulation --help` for the fixed-base arm scene and "
+        "`bbsim replay --help` to play back recorded episodes.",
     )
     p.add_argument("policy", choices=["arms", "terrain", "lean"])
     p.add_argument("--headless", action="store_true")

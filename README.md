@@ -66,6 +66,22 @@ The first run installs Python 3.12 and the locked dependencies automatically.
 
 You can also type exact hand positions and wrist angles in the side panel.
 
+## Replay episodes
+
+Put a LeRobot v2.1 dataset in `datasets/`, then:
+
+```sh
+uv run bbsim replay --list         # numbered episodes
+uv run bbsim replay --episode 2    # play one
+```
+
+| Key | Action |
+| --- | --- |
+| **Space** | Play / pause |
+| **←** / **→** | Seek 1 s (**Shift**: 0.1 s) |
+| **N** / **B** | Next / previous episode |
+| **C** | Measured / commanded joints |
+
 ## Headless runs
 
 The drive modes also run without a window, for quick checks and scripting:
