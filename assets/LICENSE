@@ -1,0 +1,69 @@
+BracketBot Asset License
+
+Copyright (c) 2026 Bracket Bot, Inc. All rights reserved.
+
+This license applies to every file in this assets/ directory, including the
+robot models (*.xml), meshes (meshes/), motor models (motors/), trained
+policies (policies/), and the inverse kinematics library (ik/), and to any
+copy, conversion, or modified version of those files (together, the "Assets").
+
+The Assets are not open source. The MIT License that covers the rest of bb-sim
+(https://github.com/Bracket-Bot-Inc/bb-sim) does not apply to them.
+
+1. Permitted use
+
+Bracket Bot, Inc. ("BracketBot") grants you a non-exclusive, non-transferable,
+non-sublicensable, revocable license to download and use the Assets solely to:
+
+  (a) run bb-sim, including versions of bb-sim you have modified; and
+  (b) develop, train, and test software and control policies that run on
+      BracketBot robots.
+
+You may modify the Assets for these purposes.
+
+You may publish papers, images, and videos that you create by using the Assets
+for these purposes, as long as you credit BracketBot.
+
+2. Restrictions
+
+Unless BracketBot gives you prior written permission, you may not:
+
+  (a) share the Assets or any modified version of them with others, whether by
+      redistributing, publishing, hosting, selling, or sublicensing them,
+      except within a fork of the bb-sim repository on GitHub that keeps this
+      license file and all copyright notices intact;
+  (b) use the Assets, or any part of them (including meshes, geometry, mass and
+      inertia values, joint layouts, motor models, and policy weights), for any
+      purpose not listed in Section 1, including to design, model, simulate,
+      train policies for, or manufacture any robot or product other than a
+      BracketBot robot;
+  (c) reverse engineer, decompile, or disassemble the IK library or the
+      trained policies, except to the extent applicable law expressly permits
+      this despite this restriction; or
+  (d) remove or change any copyright, license, or attribution notice in the
+      Assets.
+
+3. Trademarks
+
+This license does not grant any right to use the BracketBot name, logos, or
+trademarks, except to credit BracketBot as required above.
+
+4. Termination
+
+This license ends automatically if you break any of its terms. BracketBot may
+also end it at any time by giving notice. When it ends, you must stop using the
+Assets and delete every copy you have.
+
+5. No warranty and no liability
+
+THE ASSETS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING ANY WARRANTY OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, ACCURACY, OR NONINFRINGEMENT. IN NO EVENT WILL BRACKETBOT BE LIABLE
+FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR RELATED TO THE
+ASSETS OR THEIR USE, INCLUDING DAMAGE TO ROBOTS, PROPERTY, OR PEOPLE CAUSED BY
+SOFTWARE OR POLICIES DEVELOPED WITH THE ASSETS.
+
+6. Permissions
+
+To ask for permission beyond this license, including any other commercial use,
+contact Bracket Bot, Inc. at https://bracketbot.com.
