@@ -1,7 +1,7 @@
 [project]
 name = "bb-sim"
 version = "0.1.0"
-description = "Local MuJoCo playback for BracketBot balance policies"
+description = "Drive BracketBot's balance and manipulation policies in MuJoCo, no robot required."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -13,3 +13,14 @@ dependencies = [
     "pyopengl==3.1.10",
     "scipy==1.18.1",
 ]
+
+[project.scripts]
+bbsim = "bbsim.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.13,<0.10"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "bbsim"
+module-root = ""

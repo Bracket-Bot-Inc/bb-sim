@@ -38,8 +38,14 @@ def finite(value):
 
 
 def main():
+    if sys.argv[1:2] == ["manipulation"]:
+        from .manipulation import main as manipulation
+
+        sys.argv[:2] = [f"{sys.argv[0]} manipulation"]
+        return manipulation()
     p = argparse.ArgumentParser(
-        description="Run a BracketBot policy locally with chopped CAD geometry."
+        description="Run a BracketBot policy locally with chopped CAD geometry.",
+        epilog="Run `bbsim manipulation --help` for the fixed-base arm scene.",
     )
     p.add_argument("policy", choices=["arms", "terrain", "lean"])
     p.add_argument("--headless", action="store_true")
