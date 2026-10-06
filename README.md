@@ -90,6 +90,10 @@ scripts/   build_ik.py (rebuilds the native IK library)
 docs/      README GIFs and the GitHub social preview
 ```
 
+## License
+
+The simulator code is [MIT licensed](LICENSE). Everything in `assets/` (robot models, meshes, motor models, policies, and the IK library) is proprietary to Bracket Bot, Inc. You may use those files to run bb-sim and to develop software for BracketBot robots, but you may not redistribute them or use them for any other robot. See the [BracketBot Asset License](assets/LICENSE).
+
 ---
 
 <div align="center">

@@ -1,4 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
+<!-- Copyright (c) 2026 Bracket Bot, Inc. All rights reserved.
+     Proprietary. Use is subject to the BracketBot Asset License in assets/LICENSE
+     (https://github.com/Bracket-Bot-Inc/bb-sim/blob/main/assets/LICENSE). -->
 <mujoco model="fixed_base_manipulation">
   <compiler angle="radian" meshdir="meshes/" />
   <option timestep="0.002" integrator="implicitfast" iterations="60" ls_iterations="20" cone="elliptic" impratio="5" noslip_iterations="3" />
