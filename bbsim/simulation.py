@@ -3,7 +3,8 @@
 import mujoco
 import numpy as np
 
-from .config import ARM_JOINTS, ASSETS, WHEELS
+from .balance import TORQUE_NM, BalanceObservations, TurnFilter
+from .config import ARM_JOINTS, ASSETS, POLICIES, WHEELS
 from .policy import Actor, Observations, WheelMotor
 
 
@@ -49,7 +50,8 @@ class Simulation:
         )
         self.arm_dof = [self.model.joint(n).dofadr[0] for n in ARM_JOINTS] if kind == "arms" else []
         self.arm_act = [self.model.actuator(n).id for n in ARM_JOINTS] if kind == "arms" else []
-        self.actor = Actor(kind)
+        self.actor = Actor(POLICIES[kind])
+        self.balance = self.actor.name == "balance"
         self.motors = [WheelMotor(self.model, s) for s in WHEELS]
         self.command = np.array([velocity, yaw], dtype=float)
         self.lean_degrees = lean_degrees
@@ -73,7 +75,12 @@ class Simulation:
             bottoms.append(d.geom_xpos[i, 2] - extent)
         d.qpos[2] = 0.004 - min(bottoms)
         mujoco.mj_forward(m, d)
-        self.observations = Observations(self.kind)
+        if self.balance:
+            self.observations = BalanceObservations(m, arms=self.kind == "arms")
+            self.turn_filter = TurnFilter()
+        else:
+            self.observations = Observations()
+        self.pending_torques = None
         for motor in self.motors:
             motor.reset()
         self.last_action = np.zeros(2)
@@ -117,20 +124,37 @@ class Simulation:
         pitch, roll, gyro, velocity = self.state()
         arm_pos = d.qpos[self.arm_qpos] if self.arm_qpos else np.zeros(14)
         arm_vel = d.qvel[self.arm_dof] if self.arm_dof else np.zeros(14)
-        self.last_obs = self.observations.build(
-            d.qpos[self.wheel_qpos],
-            d.qvel[self.wheel_dof],
-            pitch,
-            gyro,
-            velocity,
-            self.command,
-            arm_pos,
-            arm_vel,
-            lean_degrees=self.lean_degrees,
-            ideal_wheels=self.ideal_wheels,
-        )
-        self.last_action = self.actor(self.last_obs)
-        torques = self.last_action * np.array([-6.5, 6.5])
+        if self.balance:
+            self.last_obs = self.observations.build(
+                d.xmat[self.base].reshape(3, 3),
+                d.qpos[3:7],
+                d.qvel[:3],
+                gyro,
+                d.qpos[self.wheel_qpos],
+                d.qvel[self.wheel_dof],
+                self.command,
+                arm_pos,
+                arm_vel,
+                ideal_wheels=self.ideal_wheels,
+            )
+            self.last_action = self.turn_filter(self.actor(self.last_obs))
+            # The wheel command reaches the motor one tick late.
+            command = self.last_action * np.array([-TORQUE_NM, TORQUE_NM])
+            torques = command if self.pending_torques is None else self.pending_torques
+            self.pending_torques = command
+        else:
+            self.last_obs = self.observations.build(
+                d.qpos[self.wheel_qpos],
+                d.qvel[self.wheel_dof],
+                pitch,
+                gyro,
+                velocity,
+                self.command,
+                lean_degrees=self.lean_degrees,
+                ideal_wheels=self.ideal_wheels,
+            )
+            self.last_action = self.actor(self.last_obs)
+            torques = self.last_action * np.array([-6.5, 6.5])
         for i, motor in enumerate(self.motors):
             d.ctrl[self.wheel_act[i]] = motor(torques[i], d.qvel[self.wheel_dof[i]])
         if self.arm_act:

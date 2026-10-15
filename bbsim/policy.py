@@ -1,35 +1,26 @@
 """Policy inference, training observation layout, and deterministic wheel plant."""
 
+import mujoco
 import numpy as np
 import onnxruntime as ort
 from scipy.special import expit
 
 from .config import ASSETS, DT, POLICY_INPUTS
 
-ARM_POSITION_SCALE = np.tile(
-    [
-        1.0,
-        0.49822416967897676,
-        0.6740679942715567,
-        0.49822416967897676,
-        0.520870722846203,
-        0.6740679942715567,
-        0.6740679942715567,
-    ],
-    2,
-)
-ARM_VELOCITY_SCALE = np.tile([2.5, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4], 2)
+
+def onnx_session(name):
+    opts = ort.SessionOptions()
+    opts.intra_op_num_threads = opts.inter_op_num_threads = 1
+    return ort.InferenceSession(
+        str(ASSETS / f"policies/{name}.onnx"), opts, providers=["CPUExecutionProvider"]
+    )
 
 
 class Actor:
-    def __init__(self, kind):
-        self.kind = kind
-        self.size = POLICY_INPUTS[kind]
-        opts = ort.SessionOptions()
-        opts.intra_op_num_threads = opts.inter_op_num_threads = 1
-        self.session = ort.InferenceSession(
-            str(ASSETS / f"policies/{kind}.onnx"), opts, providers=["CPUExecutionProvider"]
-        )
+    def __init__(self, name):
+        self.name = name
+        self.size = POLICY_INPUTS[name]
+        self.session = onnx_session(name)
         self.input = self.session.get_inputs()[0].name
         assert self.session.get_inputs()[0].shape == [1, self.size]
 
@@ -44,7 +35,11 @@ class Actor:
 
 
 class WheelMotor:
-    """Residual LSTM motor model; torques use the MuJoCo joint frame."""
+    """Residual LSTM motor model; torques use the MuJoCo joint frame.
+
+    BW100 models also carry the fitted Stribeck assist (kinetic friction below the joint's
+    static frictionloss) and the mechanical torque clamp.
+    """
 
     PARAMETERS = (
         "hid",
@@ -59,18 +54,29 @@ class WheelMotor:
         "w_eps",
         "sign",
     )
+    OPTIONAL = ("stick_gate_w_eps", "kinetic", "stribeck_velocity", "effort_limit")
 
     def __init__(self, model, side):
+        numerics = {model.numeric(i).name for i in range(model.nnumeric)}
         self.config = {
             name: float(model.numeric(f"wheel_{side}_{name}").data[0])
-            for name in self.PARAMETERS
+            for name in self.PARAMETERS + self.OPTIONAL
+            if name in self.PARAMETERS or f"wheel_{side}_{name}" in numerics
         }
         for name in ("hid", "layers"):
             value = self.config[name]
             if not value.is_integer() or value < 1:
                 raise ValueError(f"wheel_{side}_{name} must be a positive integer")
             self.config[name] = int(value)
-        with np.load(ASSETS / f"motors/wheel_{side}.npz") as z:
+        # One net for both wheels when the model names it, else per-wheel nets.
+        i = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_TEXT, "wheel_model")
+        adr = model.text_adr[i] if i >= 0 else 0
+        weights = (
+            model.text_data[adr : adr + model.text_size[i] - 1].decode()
+            if i >= 0
+            else f"wheel_{side}"
+        )
+        with np.load(ASSETS / f"motors/{weights}.npz") as z:
             self.weights = {k: z[k] for k in z.files}
         self.reset()
 
@@ -113,7 +119,15 @@ class WheelMotor:
             and abs(base) < c["frictionloss"]
         ):
             residual = 0.0
-        return (base + residual) * sign
+        torque = (base + residual) * sign
+        if "kinetic" in c:
+            assist = (c["frictionloss"] - c["kinetic"]) * (
+                1 - np.exp(-((velocity / c["stribeck_velocity"]) ** 2))
+            )
+            torque = np.clip(
+                torque + assist * np.sign(velocity), -c["effort_limit"], c["effort_limit"]
+            )
+        return torque
 
 
 class HallEstimator:
@@ -149,12 +163,11 @@ class HallEstimator:
 
 
 class Observations:
-    def __init__(self, kind):
-        self.kind = kind
+    """Lean actor input (the balance modes use balance.BalanceObservations)."""
+
+    def __init__(self):
         self.pitch_rates = np.zeros(5)
         self.actions = np.zeros((3, 2))
-        self.arm_position = np.zeros(14)
-        self.arm_velocity = np.zeros((3, 14))
         self.arc_error = 0.0
         self.step = 0
         self.hall = HallEstimator()
@@ -167,8 +180,6 @@ class Observations:
         gyro,
         body_velocity,
         command,
-        arm_position,
-        arm_velocity,
         lean_degrees=3.0,
         ideal_wheels=False,
     ):
@@ -177,36 +188,20 @@ class Observations:
             self.pitch_rates[:] = gyro[1]
         self.pitch_rates[:-1] = self.pitch_rates[1:]
         self.pitch_rates[-1] = gyro[1]
-        if self.step % 4 == 0:
-            self.arm_position[:] = arm_position
-            if self.step == 0:
-                self.arm_velocity[:] = arm_velocity
-            else:
-                self.arm_velocity[:-1] = self.arm_velocity[1:]
-                self.arm_velocity[-1] = arm_velocity
         # Training ARC uses true body-frame forward velocity, with ±0.5 m clamp.
         if self.step:
             self.arc_error = np.clip(self.arc_error + (command[0] - body_velocity) * DT, -0.5, 0.5)
         velocity = wheel_vel if ideal_wheels else self.hall(wheel_pos)
-        common = np.r_[
+        obs = np.r_[
             velocity * np.array([-0.05, 0.05]),
             pitch * 4,
             self.pitch_rates,
             gyro[2] * 0.4,
             command * np.array([4.0, 1.0]),
             self.actions.ravel(),
+            self.arc_error * 2,
+            lean_degrees / 3.0,
         ]
-        if self.kind == "arms":
-            obs = np.r_[
-                common,
-                self.arm_position * ARM_POSITION_SCALE,
-                self.arc_error * 2,
-                (self.arm_velocity * ARM_VELOCITY_SCALE).ravel(),
-            ]
-        elif self.kind == "lean":
-            obs = np.r_[common, self.arc_error * 2, lean_degrees / 3.0]
-        else:
-            obs = np.r_[common, self.arc_error * 2]
         self.step += 1
         return obs.astype(np.float32)
 
