@@ -6,27 +6,36 @@
   <compiler angle="radian" meshdir="meshes/" />
   <option timestep="0.005" integrator="implicitfast" iterations="10" ls_iterations="20" />
   <custom>
-    <numeric name="wheel_left_hid" data="64" />
+    <text name="wheel_model" data="bw100" />
+    <numeric name="wheel_left_hid" data="96" />
     <numeric name="wheel_left_layers" data="1" />
-    <numeric name="wheel_left_pos_scale" data="0.2330816090106964" />
-    <numeric name="wheel_left_vel_scale" data="0.023575877770781517" />
+    <numeric name="wheel_left_pos_scale" data="0.15981505811214447" />
+    <numeric name="wheel_left_vel_scale" data="0.023036431521177292" />
     <numeric name="wheel_left_torque_scale" data="1.0" />
-    <numeric name="wheel_left_frictionloss" data="0.328" />
+    <numeric name="wheel_left_frictionloss" data="0.11" />
+    <numeric name="wheel_left_kinetic" data="0.0925" />
+    <numeric name="wheel_left_stribeck_velocity" data="6.0" />
+    <numeric name="wheel_left_effort_limit" data="100.0" />
     <numeric name="wheel_left_dc_sat" data="8.0" />
     <numeric name="wheel_left_dc_vlim" data="44.0" />
     <numeric name="wheel_left_dc_elim" data="6.5" />
     <numeric name="wheel_left_w_eps" data="0.15" />
+    <numeric name="wheel_left_stick_gate_w_eps" data="0.02" />
     <numeric name="wheel_left_sign" data="1.0" />
-    <numeric name="wheel_right_hid" data="64" />
+    <numeric name="wheel_right_hid" data="96" />
     <numeric name="wheel_right_layers" data="1" />
-    <numeric name="wheel_right_pos_scale" data="0.2688172161579132" />
-    <numeric name="wheel_right_vel_scale" data="0.023460423573851585" />
+    <numeric name="wheel_right_pos_scale" data="0.15981505811214447" />
+    <numeric name="wheel_right_vel_scale" data="0.023036431521177292" />
     <numeric name="wheel_right_torque_scale" data="1.0" />
-    <numeric name="wheel_right_frictionloss" data="0.311" />
+    <numeric name="wheel_right_frictionloss" data="0.11" />
+    <numeric name="wheel_right_kinetic" data="0.0925" />
+    <numeric name="wheel_right_stribeck_velocity" data="6.0" />
+    <numeric name="wheel_right_effort_limit" data="100.0" />
     <numeric name="wheel_right_dc_sat" data="8.0" />
     <numeric name="wheel_right_dc_vlim" data="44.0" />
     <numeric name="wheel_right_dc_elim" data="6.5" />
     <numeric name="wheel_right_w_eps" data="0.15" />
+    <numeric name="wheel_right_stick_gate_w_eps" data="0.02" />
     <numeric name="wheel_right_sign" data="1.0" />
   </custom>
   <asset>
@@ -113,14 +122,14 @@
       <site name="imu" pos="0 0 0" size="0.01" />
       <body name="left_wheel" pos="9.107328125e-07 0.133 -3.529274425e-07" quat="0.5000018359957487 0.4999968369957487 -0.5000018359957487 0.4999994909957486">
         <inertial pos="-3.9440755e-07 -1.92833643e-07 -0.0401824131" quat="0.5000016251155746 0.5000005578888751 -0.4999983748791448 0.4999994421105038" mass="1.132605" diaginertia="0.003581705300035513 0.002078043979971336 0.002078043979993149" />
-        <joint name="left" pos="0 0 0" axis="0 -1.64267615e-43 1" actuatorfrcrange="-6.5 6.5" armature="0.00638" damping="0.00273" frictionloss="0.328" />
+        <joint name="left" pos="0 0 0" axis="0 -1.64267615e-43 1" actuatorfrcrange="-100 100" armature="0.000725" damping="0.001375" frictionloss="0.13" />
         <geom name="left_wheel_cap__left_wheel_cap" pos="-0.00696896 -0.0113016 0.133" quat="2.76512e-06 -0.707124 0.70709 2.55431e-06" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.301961 0.301961 0.301961 1" mesh="Left_wheel_cap__Left_wheel_cap" />
         <geom name="left_wheel_tire__left_wheel_tire" pos="-0.00696896 -0.0113016 0.133" quat="2.76512e-06 -0.707124 0.70709 2.55431e-06" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.301961 0.301961 0.301961 1" mesh="Left_Wheel_Tire__Left_Wheel_Tire" />
         <geom name="left_wheel_col" size="0.0846 0.025" pos="-7.65934184025138e-07 -4.851300651778653e-07 -0.02792992357454152" type="cylinder" group="3" rgba="0.2 0.2 0.2 0" />
       </body>
       <body name="right_wheel" pos="-9.107328125e-07 -0.133 3.529274425e-07" quat="-0.4999981629981827 0.5000018369981827 0.4999994899981827 0.5000005099981827">
         <inertial pos="-8.885807449999999e-12 -1.9662323e-11 -0.0401824131" quat="0.5000000000000007 0.5000000000000007 -0.5000000000000007 0.5000000000000007" mass="1.132605" diaginertia="0.0035817053 0.00207804398 0.00207804398" />
-        <joint name="right" pos="0 0 0" axis="0 -1.64267476e-43 1" actuatorfrcrange="-6.5 6.5" armature="0.0065" damping="0.0023" frictionloss="0.311" />
+        <joint name="right" pos="0 0 0" axis="0 -1.64267476e-43 1" actuatorfrcrange="-100 100" armature="0.000725" damping="0.001375" frictionloss="0.13" />
         <geom name="right_wheel_cap__right_wheel_cap" pos="-0.00696893 0.0113019 0.133" quat="0.707125 1.82818e-06 -1.61742e-06 0.707089" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.301961 0.301961 0.301961 1" mesh="Right_Wheel_Cap__Right_Wheel_Cap" />
         <geom name="right_wheel_tire__right_wheel_tire" pos="-0.00696893 0.0113019 0.133" quat="0.707125 1.82818e-06 -1.61742e-06 0.707089" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.301961 0.301961 0.301961 1" mesh="Right_Wheel_Tire__Right_Wheel_Tire" />
         <geom name="right_wheel_col" size="0.0846 0.025" pos="-5.171220325380059e-07 -1.195664943032925e-07 -0.02792992357800139" type="cylinder" group="3" rgba="0.2 0.2 0.2 0" />
@@ -208,12 +217,12 @@
         </body>
       </body>
     </body>
-    <body name="table_edge" pos="0.32 0 0.85" mocap="true">
-      <geom name="table_edge_geom" size="0.05 0.6 0.15" type="box" contype="2" conaffinity="2" mass="0" rgba="0.47 0.31 0.18 1" />
+    <body name="table_edge" pos="0.32 0 0.65" mocap="true">
+      <geom name="table_edge_geom" size="0.05 0.6 0.15" type="box" contype="2" conaffinity="2" mass="0" friction="0.4 0.005 0.0001" solref="0.02 1" rgba="0.47 0.31 0.18 1" />
     </body>
   </worldbody>
   <actuator>
-    <general name="left" joint="left" forcelimited="true" forcerange="-15 15" />
-    <general name="right" joint="right" forcelimited="true" forcerange="-15 15" />
+    <general name="left" joint="left" forcelimited="true" forcerange="-100 100" />
+    <general name="right" joint="right" forcelimited="true" forcerange="-100 100" />
   </actuator>
 </mujoco>

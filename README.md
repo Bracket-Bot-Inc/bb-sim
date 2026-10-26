@@ -10,7 +10,7 @@
 
 </div>
 
-bb-sim runs BracketBot's balance and lean policies against a MuJoCo model built from the robot's CAD. The balance policy is the same one that ships on the robot. The model, meshes, and policy weights are all in this repo, so it runs offline with no robot connection.
+bb-sim runs BracketBot's balance and lean policies against a MuJoCo model built from the robot's CAD. The balance and lean policies are the same ones that ship on the robot. The model, meshes, and policy weights are all in this repo, so it runs offline with no robot connection.
 
 ## Quickstart
 

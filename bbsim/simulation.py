@@ -3,9 +3,9 @@
 import mujoco
 import numpy as np
 
-from .balance import TORQUE_NM, BalanceObservations, TurnFilter
-from .config import ARM_JOINTS, ASSETS, POLICIES, WHEELS
-from .policy import Actor, Observations, WheelMotor
+from .balance import TORQUE_NM, Controller
+from .config import ARM_JOINTS, ASSETS, LEAN_SETTLE_S, POLICY_INPUTS, WHEELS
+from .policy import WheelMotor
 
 
 class Simulation:
@@ -50,11 +50,10 @@ class Simulation:
         )
         self.arm_dof = [self.model.joint(n).dofadr[0] for n in ARM_JOINTS] if kind == "arms" else []
         self.arm_act = [self.model.actuator(n).id for n in ARM_JOINTS] if kind == "arms" else []
-        self.actor = Actor(POLICIES[kind])
-        self.balance = self.actor.name == "balance"
         self.motors = [WheelMotor(self.model, s) for s in WHEELS]
         self.command = np.array([velocity, yaw], dtype=float)
         self.lean_degrees = lean_degrees
+        self.lean_request = kind == "lean"
         self.arm_motion = arm_motion
         self.ideal_wheels = ideal_wheels
         self.start_pitch = np.deg2rad(start_pitch)
@@ -75,16 +74,12 @@ class Simulation:
             bottoms.append(d.geom_xpos[i, 2] - extent)
         d.qpos[2] = 0.004 - min(bottoms)
         mujoco.mj_forward(m, d)
-        if self.balance:
-            self.observations = BalanceObservations(m, arms=self.kind == "arms")
-            self.turn_filter = TurnFilter()
-        else:
-            self.observations = Observations()
+        self.controller = Controller(m, arms=self.kind == "arms")
         self.pending_torques = None
         for motor in self.motors:
             motor.reset()
         self.last_action = np.zeros(2)
-        self.last_obs = np.zeros(self.actor.size)
+        self.last_obs = np.zeros(POLICY_INPUTS["balance"])
         self.failed = None
         self.stats = dict(
             steps=0,
@@ -121,45 +116,31 @@ class Simulation:
         m, d = self.model, self.data
         # Refresh transforms after the previous integration before observing.
         mujoco.mj_forward(m, d)
-        pitch, roll, gyro, velocity = self.state()
+        _, _, gyro, _ = self.state()
         arm_pos = d.qpos[self.arm_qpos] if self.arm_qpos else np.zeros(14)
         arm_vel = d.qvel[self.arm_dof] if self.arm_dof else np.zeros(14)
-        if self.balance:
-            self.last_obs = self.observations.build(
-                d.xmat[self.base].reshape(3, 3),
-                d.qpos[3:7],
-                d.qvel[:3],
-                gyro,
-                d.qpos[self.wheel_qpos],
-                d.qvel[self.wheel_dof],
-                self.command,
-                arm_pos,
-                arm_vel,
-                ideal_wheels=self.ideal_wheels,
-            )
-            self.last_action = self.turn_filter(self.actor(self.last_obs))
-            # The wheel command reaches the motor one tick late.
-            command = self.last_action * np.array([-TORQUE_NM, TORQUE_NM])
-            torques = command if self.pending_torques is None else self.pending_torques
-            self.pending_torques = command
-        else:
-            self.last_obs = self.observations.build(
-                d.qpos[self.wheel_qpos],
-                d.qvel[self.wheel_dof],
-                pitch,
-                gyro,
-                velocity,
-                self.command,
-                lean_degrees=self.lean_degrees,
-                ideal_wheels=self.ideal_wheels,
-            )
-            self.last_action = self.actor(self.last_obs)
-            torques = self.last_action * np.array([-6.5, 6.5])
+        self.last_obs, self.last_action = self.controller(
+            d.xmat[self.base].reshape(3, 3),
+            d.qpos[3:7],
+            d.qvel[:3],
+            gyro,
+            d.qpos[self.wheel_qpos],
+            d.qvel[self.wheel_dof],
+            self.command,
+            arm_pos,
+            arm_vel,
+            lean_request=self.lean_request and d.time >= LEAN_SETTLE_S,
+            lean_degrees=self.lean_degrees,
+            ideal_wheels=self.ideal_wheels,
+        )
+        # The wheel command reaches the motor one tick late.
+        command = self.last_action * np.array([-TORQUE_NM, TORQUE_NM])
+        torques = command if self.pending_torques is None else self.pending_torques
+        self.pending_torques = command
         for i, motor in enumerate(self.motors):
             d.ctrl[self.wheel_act[i]] = motor(torques[i], d.qvel[self.wheel_dof[i]])
         if self.arm_act:
             d.ctrl[self.arm_act] = self.arm_target()
-        self.observations.remember_action(self.last_action)
         mujoco.mj_step(m, d)
         mujoco.mj_forward(m, d)
         pitch, roll, _, _ = self.state()

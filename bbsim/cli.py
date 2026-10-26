@@ -72,7 +72,12 @@ def main():
         default=0.0,
         help="Yaw command when headless; WASD turn speed in the UI (rad/s)",
     )
-    p.add_argument("--lean-angle", type=finite, default=3.0, help="LEAN_V3E angle in degrees, 1–15")
+    p.add_argument(
+        "--lean-angle",
+        type=finite,
+        default=3.0,
+        help="Lean angle in degrees, 1–15 (requested 3 s in)",
+    )
     p.add_argument(
         "--wall-distance", type=finite, default=0.32, help="Lean table slab center X, metres"
     )
@@ -135,7 +140,7 @@ def main():
                 trace[key].append(value)
 
     print(
-        f"{a.policy}: 200 Hz | {sim.actor.size} observations | 13.605122 kg | local simulation",
+        f"{a.policy}: 200 Hz | {sim.last_obs.size} observations | 13.605122 kg | local simulation",
         flush=True,
     )
     if a.headless:

@@ -1,4 +1,4 @@
-"""Fixed-base arm manipulation with the arm daemon's IK and physical gripper contacts."""
+"""Fixed-base arm manipulation with the teleop app's IK and physical gripper contacts."""
 
 import argparse
 from xml.etree import ElementTree as ET

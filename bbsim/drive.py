@@ -59,8 +59,8 @@ class DriveControls:
 
     def _apply_mode(self):
         if self.sim.kind == "lean":
-            # LEAN_V3E's slot 18 is zero for twist driving, angle/3 for lean.
-            self.sim.lean_degrees = self.lean_angle if self.lean_contact else 0.0
+            self.sim.lean_request = self.lean_contact
+            self.sim.lean_degrees = self.lean_angle
             self.sim.data.mocap_pos[:] = self.table_position
             if not self.lean_contact:
                 self.sim.data.mocap_pos[:, 2] = -5.0

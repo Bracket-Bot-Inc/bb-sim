@@ -1,4 +1,4 @@
-"""The arm daemon's IK, with the shoulder offset taken from the active MJCF."""
+"""The teleop app's IK, with the shoulder offset taken from the active MJCF."""
 
 import collections
 
