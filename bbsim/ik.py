@@ -1,177 +1,87 @@
-"""The arm daemon's native IK interface, using kinematics from the active MJCF."""
+"""The arm daemon's IK, with the shoulder offset taken from the active MJCF."""
 
-import ctypes as ct
-import platform
-from pathlib import Path
-from xml.etree import ElementTree as ET
+import collections
 
 import mujoco
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from .config import ASSETS
+from .policy import onnx_session
 
-DoublePtr = ct.POINTER(ct.c_double)
-
-
-class Result(ct.Structure):
-    _fields_ = [("data", DoublePtr), ("length", ct.c_int)]
-
-
-def vector(values):
-    return " ".join(f"{x:.16g}" for x in values)
-
-
-def kinematic_urdf(model, side):
-    data = mujoco.MjData(model)
-    mujoco.mj_forward(model, data)
-    robot = ET.Element("robot", name=f"{side}_arm")
-    parent = "arm_base"
-    ET.SubElement(robot, "link", name=parent)
-    base = model.body("base").id
-    position, rotation = data.xpos[base].copy(), data.xmat[base].reshape(3, 3).copy()
-    for index in range(8):
-        name = f"{side}j{index}" if index < 7 else f"{side}_eef"
-        if index < 7:
-            joint = model.joint(name)
-            anchor = data.xanchor[joint.id]
-            axis = data.xaxis[joint.id]
-            helper = np.eye(3)[np.argmin(np.abs(axis))]
-            x = np.cross(helper, axis)
-            x /= np.linalg.norm(x)
-            frame = np.column_stack((x, np.cross(axis, x), axis))
-            kind = "prismatic" if index == 0 else "revolute"
-        else:
-            site = model.site(name).id
-            anchor = data.site_xpos[site]
-            frame = data.site_xmat[site].reshape(3, 3)
-            kind = "fixed"
-        ET.SubElement(robot, "link", name=name)
-        element = ET.SubElement(robot, "joint", name=f"{name}_joint", type=kind)
-        ET.SubElement(element, "parent", link=parent)
-        ET.SubElement(element, "child", link=name)
-        ET.SubElement(
-            element,
-            "origin",
-            xyz=vector(rotation.T @ (anchor - position)),
-            rpy=vector(Rotation.from_matrix(rotation.T @ frame).as_euler("xyz")),
-        )
-        if index < 7:
-            ET.SubElement(element, "axis", xyz="0 0 1")
-            ET.SubElement(
-                element,
-                "limit",
-                lower=str(joint.range[0]),
-                upper=str(joint.range[1]),
-                effort="100",
-                velocity="2",
-            )
-        parent, position, rotation = name, anchor, frame
-    return ET.tostring(robot)
+DT = 1.0 / 60.0
+SAMPLES = (1, 2, 4, 6, 8)  # earlier targets the network sees, in DT
+HISTORY_RESET_S = 0.25  # a longer gap between solves restarts the history and the speed cap
+MAX_SPEED = np.array([0.25] + [15.0] * 6)  # lift m/s, then rad/s
+# j1 in the frame the network was trained in, base coordinates.
+TRAINING_J1 = {
+    "l": np.array([-0.007939332, 0.113248292, 1.222503448]),
+    "r": np.array([-0.007939267, -0.113247529, 1.222502847]),
+}
 
 
-class NativeIK:
-    def __init__(self, model, side, library=None, api="daemon"):
-        suffix = ".dylib" if platform.system() == "Darwin" else ".so"
-        path = (
-            Path(library)
-            if library
-            else (
-                ASSETS
-                / "ik"
-                / f"{platform.system().lower()}-{platform.machine()}"
-                / f"libhybrid_ik_lib{suffix}"
-            )
-        )
-        try:
-            self.lib = ct.CDLL(str(path.resolve()))
-        except OSError as error:
-            raise RuntimeError(
-                f"Cannot load IK library {path}: {error}\n"
-                "Supply --ik-library built for this OS/CPU, or run "
-                "uv run python scripts/build_ik.py /path/to/bracketbot_ik"
-            ) from error
-        lib = self.lib
-        lib.relaxed_ik_new.argtypes = [ct.c_char_p] * 3 + [DoublePtr, ct.c_int] * 2
-        lib.relaxed_ik_new.argtypes += [ct.c_double] * (2 if api == "legacy" else 1) + [ct.c_int]
-        lib.relaxed_ik_new.restype = ct.c_void_p
-        lib.relaxed_ik_free.argtypes = [ct.c_void_p]
-        lib.relaxed_ik_free.restype = None
-        for name in ("reset", "set_tolerances", "set_centering_weights"):
-            function = getattr(lib, name)
-            function.argtypes = [ct.c_void_p, DoublePtr, ct.c_int]
-            function.restype = None
-        lib.solve_pose.argtypes = [
-            ct.c_void_p,
-            DoublePtr,
-            ct.c_int,
-            DoublePtr,
-            ct.c_int,
-        ]
-        lib.solve_pose.restype = Result
-        lib.forward_kinematics.argtypes = [ct.c_void_p, DoublePtr, ct.c_int]
-        lib.forward_kinematics.restype = Result
-        self.release = getattr(lib, "free_result", None)
-        if self.release:
-            self.release.argtypes, self.release.restype = [Result], None
-        else:
-            # bbcore's Vec<f64> results use Rust's default system allocator.
-            self.free = ct.CDLL(None).free
-            self.free.argtypes, self.free.restype = [ct.c_void_p], None
-        initial = self._array(np.zeros(7))
-        weights = [10.0, 0.1] if api == "legacy" else [0.1]
-        self.ptr = lib.relaxed_ik_new(
-            kinematic_urdf(model, side),
-            b"arm_base",
-            f"{side}_eef".encode(),
-            initial,
-            7,
-            initial,
-            7,
-            *weights,
-            5,
-        )
-        if not self.ptr:
-            raise RuntimeError("IK constructor returned a null solver")
-        lib.set_tolerances(self.ptr, self._array([0.001] * 3 + [0.01] * 3), 6)
-        lib.set_centering_weights(self.ptr, self._array([50, 25, 15, 5, 10, 12, 1.5]), 7)
+class ArmIK:
+    """One arm: targets are the {side}_eef site pose in base coordinates (xyz, quat xyzw)."""
 
-    @staticmethod
-    def _array(values):
-        return (ct.c_double * len(values))(*values)
-
-    def _result(self, result):
-        try:
-            if result.length != 7 or not result.data:
-                raise RuntimeError("IK returned an invalid result")
-            value = np.ctypeslib.as_array(result.data, shape=(7,)).copy()
-            if not np.isfinite(value).all():
-                raise RuntimeError("IK returned non-finite values")
-            return value
-        finally:
-            if self.release:
-                self.release(result)
-            elif result.data:
-                self.free(result.data)
-
-    def solve(self, position, quaternion):
-        return self._result(
-            self.lib.solve_pose(
-                self.ptr,
-                self._array(position),
-                3,
-                self._array(quaternion),
-                4,
-            )
-        )
-
-    def forward(self, joints):
-        return self._result(self.lib.forward_kinematics(self.ptr, self._array(joints), 7))
+    def __init__(self, model, side, session=None):
+        self.session = session or onnx_session("ik")
+        data = mujoco.MjData(model)
+        mujoco.mj_kinematics(model, data)
+        base = model.body("base").id
+        j1 = model.joint(f"{side}j1").id
+        anchor = data.xmat[base].reshape(3, 3).T @ (data.xanchor[j1] - data.xpos[base])
+        self.offset = anchor - TRAINING_J1[side]
+        joints = [model.joint(f"{side}j{i}").id for i in range(7)]
+        self.limits = model.jnt_range[joints]
+        self.left = np.array([float(side == "l")], np.float32)
+        self.buffer = collections.deque(maxlen=256)  # (t, position, rotation)
+        self.reset(np.zeros(7))
 
     def reset(self, joints):
-        self.lib.reset(self.ptr, self._array(joints), 7)
+        """Forget the target history; joints are held if the next target is non-finite."""
+        self.buffer.clear()
+        self.u = None
+        self.last_q, self.last_t = np.array(joints[:7], float), None
 
-    def close(self):
-        if self.ptr:
-            self.lib.relaxed_ik_free(self.ptr)
-            self.ptr = None
+    def _at(self, t):
+        b = self.buffer
+        if t <= b[0][0]:
+            return b[0][1], b[0][2]
+        for (t0, p0, R0), (t1, p1, R1) in zip(reversed(list(b)[:-1]), reversed(list(b)[1:])):
+            if t0 <= t <= t1:
+                s = (t - t0) / max(t1 - t0, 1e-6)
+                step = Rotation.from_matrix(R0.T @ R1).as_rotvec()
+                return p0 + s * (p1 - p0), R0 @ Rotation.from_rotvec(s * step).as_matrix()
+        return b[-1][1], b[-1][2]
+
+    def solve(self, position, quaternion, t):
+        p = np.asarray(position, float)
+        quat = np.asarray(quaternion, float)
+        if not (np.isfinite(p).all() and np.isfinite(quat).all() and np.linalg.norm(quat) > 1e-6):
+            return self.last_q
+        R = Rotation.from_quat(quat).as_matrix()
+        p = p - self.offset
+        if self.buffer and t - self.buffer[-1][0] > HISTORY_RESET_S:
+            self.buffer.clear()
+        fresh = not self.buffer or self.u is None
+        self.buffer.append((t, p, R))
+        poses = [(p, R)] + [self._at(t - k * DT) for k in SAMPLES]
+        pose = np.array([np.r_[pk, Rk.ravel()] for pk, Rk in poses], np.float32)[None]
+        q, u = self.session.run(
+            None,
+            dict(
+                pose=pose,
+                u=(np.zeros((1, 7)) if self.u is None else self.u).astype(np.float32),
+                fresh=np.array([float(fresh)], np.float32),
+                left=self.left,
+            ),
+        )
+        q = q[0].astype(float)
+        self.u = u if np.isfinite(q).all() else None
+        if not np.isfinite(q).all():
+            return self.last_q
+        q = np.clip(q, self.limits[:, 0], self.limits[:, 1])
+        if self.last_t is not None and t - self.last_t < HISTORY_RESET_S:
+            step = MAX_SPEED * max(t - self.last_t, 1e-3)
+            q = np.clip(q, self.last_q - step, self.last_q + step)
+        self.last_q, self.last_t = q, t
+        return q

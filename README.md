@@ -35,7 +35,7 @@ The first run installs Python 3.12 and the locked dependencies automatically.
 | `arms` | Balance policy that handles moving arms. **M** toggles a reach demo. | `uv run bbsim arms` |
 | `terrain` | Balance on flat ground, low bumps, or a 3° slope. Arms stay at the training pose. | `uv run bbsim terrain --terrain bumps` |
 | `lean` | Lean into a table edge at 1–15°. **L** toggles the table; **[** and **]** change the angle. | `uv run bbsim lean` |
-| `manipulation` | Fixed base with the native IK solver. Grab the block or the cylinder. | `uv run bbsim manipulation` |
+| `manipulation` | Fixed base with the robot's arm IK. Grab the block or the cylinder. | `uv run bbsim manipulation` |
 
 ## Controls
 
@@ -95,20 +95,18 @@ Useful flags: `--velocity` and `--yaw` set the command, `--start-pitch` starts t
 ## Requirements
 
 - Tested on macOS with Apple Silicon. The windowed UI and `--screenshot` need OpenGL; other headless runs don't.
-- `manipulation` loads a native IK library that's bundled only for Apple Silicon macOS (`assets/ik/darwin-arm64`). On other platforms, build it from a `bracketbot_ik` checkout with `uv run python scripts/build_ik.py /path/to/bracketbot_ik`, or pass `--ik-library`.
 
 ## What's in the repo
 
 ```text
 bbsim/     simulator, policy runner, observation builder, and viewers
-assets/    MJCF scenes, CAD meshes, ONNX policies, wheel motor models, IK library
-scripts/   build_ik.py (rebuilds the native IK library)
+assets/    MJCF scenes, CAD meshes, ONNX policies and arm IK, wheel motor models
 docs/      README GIFs and the GitHub social preview
 ```
 
 ## License
 
-The simulator code is [MIT licensed](LICENSE). Everything in `assets/` (robot models, meshes, motor models, policies, and the IK library) is proprietary to Bracket Bot, Inc. You may use those files to run bb-sim and to develop software for BracketBot robots, but you may not redistribute them or use them for any other robot. See the [BracketBot Asset License](assets/LICENSE).
+The simulator code is [MIT licensed](LICENSE). Everything in `assets/` (robot models, meshes, motor models, policies, and the arm IK) is proprietary to Bracket Bot, Inc. You may use those files to run bb-sim and to develop software for BracketBot robots, but you may not redistribute them or use them for any other robot. See the [BracketBot Asset License](assets/LICENSE).
 
 ---
 

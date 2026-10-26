@@ -182,7 +182,7 @@ class ManipulationWindow(DriveWindow):
         left, x = self.width - self.PANEL, self.width - self.PANEL + 20
         self._fill(left, 0, self.PANEL, self.height, (0.045, 0.065, 0.09, 1))
         self._text(x, 18, "MANIPULATION", big=True)
-        self._text(x, 54, "Fixed base  /  native IK")
+        self._text(x, 54, "Fixed base  /  arm IK")
         self.buttons = [
             Button("arm:0", "Left arm", x, 87, 154, active=c.arm == 0),
             Button("arm:1", "Right arm", x + 164, 87, 154, active=c.arm == 1),

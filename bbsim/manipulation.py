@@ -1,7 +1,6 @@
-"""Fixed-base arm manipulation with native IK and physical gripper contacts."""
+"""Fixed-base arm manipulation with the arm daemon's IK and physical gripper contacts."""
 
 import argparse
-from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import mujoco
@@ -9,13 +8,14 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from .config import ASSETS
-from .ik import NativeIK
+from .ik import DT, ArmIK
+from .policy import onnx_session
 
 
 class Manipulation:
     kind = "manipulation"
 
-    def __init__(self, library=None, api="daemon", rigid_pads=False):
+    def __init__(self, rigid_pads=False):
         self.rigid_pads = rigid_pads
         path = ASSETS / "manipulation.xml"
         if rigid_pads:
@@ -63,26 +63,23 @@ class Manipulation:
         self.grippers = np.array([self.model.actuator(f"{side}_grip").id for side in "lr"])
         self.grip_range = self.model.actuator_ctrlrange[self.grippers]
         self.sites = [self.model.site(f"{side}_eef").id for side in "lr"]
-        self.solvers = []
-        try:
-            for side in "lr":
-                self.solvers.append(NativeIK(self.model, side, library, api))
-            self.reset()
-        except BaseException:
-            self.close()
-            raise
+        session = onnx_session("ik")
+        self.solvers = [ArmIK(self.model, side, session) for side in "lr"]
+        self.reset()
 
     def reset(self):
         mujoco.mj_resetData(self.model, self.data)
-        self.targets = np.array([[0.27, 0.20, 0.63, 0, 0, 0], [0.27, -0.20, 0.63, 0, 0, 0]])
+        self.targets = np.array([[0.25, 0.20, 0.60, 180, 0, 0], [0.25, -0.20, 0.60, 180, 0, 0]])
         self.opening = np.ones(2)
         self.command = np.zeros((2, 7))
         self.failed = False
         self.ticks = 0
         for arm, solver in enumerate(self.solvers):
             solver.reset(np.zeros(7))
-            for _ in range(250):
-                self.command[arm] = solver.solve(self.targets[arm, :3], [0, 0, 0, 1])
+            quaternion = Rotation.from_euler("xyz", self.targets[arm, 3:], degrees=True).as_quat()
+            # Half a second of a held target, ending at t = 0.
+            for k in range(30, -1, -1):
+                self.command[arm] = solver.solve(self.targets[arm, :3], quaternion, -k * DT)
             self.data.qpos[self.qpos[arm]] = self.command[arm]
             for i in range(2):
                 joint = self.model.joint(f"{'lr'[arm]}_grip{i}")
@@ -132,9 +129,7 @@ class Manipulation:
                 quaternion = Rotation.from_euler(
                     "xyz", self.targets[arm, 3:], degrees=True
                 ).as_quat()
-                self.solution[arm] = solver.solve(self.targets[arm, :3], quaternion)
-                limits = self.model.jnt_range[self.joints[arm]]
-                self.solution[arm] = np.clip(self.solution[arm], limits[:, 0], limits[:, 1])
+                self.solution[arm] = solver.solve(self.targets[arm, :3], quaternion, self.data.time)
         dt = self.model.opt.timestep
         speed = np.array([0.18, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2]) * dt
         self.command += np.clip(self.solution - self.command, -speed, speed)
@@ -149,20 +144,9 @@ class Manipulation:
             warning.number for warning in self.data.warning
         )
 
-    def close(self):
-        for solver in self.solvers:
-            solver.close()
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ik-library", type=Path, help="Native bbcore IK .so or macOS .dylib")
-    parser.add_argument(
-        "--ik-api",
-        choices=["daemon", "legacy"],
-        default="daemon",
-        help="legacy: older constructor with two centering parameters",
-    )
     parser.add_argument("--headless", action="store_true")
     parser.add_argument(
         "--rigid-pads", action="store_true", help="Hold the inserts rigid for comparison"
@@ -171,32 +155,24 @@ def main():
     args = parser.parse_args()
     if args.duration is not None and (not np.isfinite(args.duration) or args.duration <= 0):
         parser.error("--duration must be finite and positive")
-    if args.ik_api == "legacy" and args.ik_library is None:
-        parser.error("--ik-api legacy requires --ik-library")
     duration = (
         args.duration if args.duration is not None else (5 if args.headless else float("inf"))
     )
-    try:
-        sim = Manipulation(args.ik_library, args.ik_api, args.rigid_pads)
-    except (RuntimeError, AttributeError) as error:
-        parser.exit(1, f"{error}\n")
-    try:
-        if args.headless:
-            while sim.data.time < duration and not sim.failed:
-                sim.step()
-            print(f"{sim.data.time:.1f}s | hand errors (mm): {sim.errors() * 1000}")
-        else:
-            from .manipulation_ui import ManipulationWindow
+    sim = Manipulation(args.rigid_pads)
+    if args.headless:
+        while sim.data.time < duration and not sim.failed:
+            sim.step()
+        print(f"{sim.data.time:.1f}s | hand errors (mm): {sim.errors() * 1000}")
+    else:
+        from .manipulation_ui import ManipulationWindow
 
-            window = ManipulationWindow(sim)
-            try:
-                window.run(duration, sim.step)
-            finally:
-                window.close()
-        if sim.failed:
-            parser.exit(2, "Physics became unstable; reset the scene.\n")
-    finally:
-        sim.close()
+        window = ManipulationWindow(sim)
+        try:
+            window.run(duration, sim.step)
+        finally:
+            window.close()
+    if sim.failed:
+        parser.exit(2, "Physics became unstable; reset the scene.\n")
 
 
 if __name__ == "__main__":
