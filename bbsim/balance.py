@@ -4,6 +4,7 @@ import mujoco
 import numpy as np
 
 from .config import ARM_JOINTS, DT, WHEELS
+from .imu import ImuSensor
 from .policy import Actor, HallEstimator, onnx_session
 
 GRAVITY = 9.80665
@@ -12,7 +13,6 @@ ACTION_HISTORY_SCALE = 5.5 / 6.5
 WHEEL_SIGNS = np.array([-1.0, 1.0])  # forward-positive [left, right]
 WHEEL_RADIUS = 0.0825
 CMD_INT_CLAMP = 0.1
-IMU_OFFSET = np.array([0.04, 0.0, 0.0])  # from the axle, base frame
 AUX_COLUMNS = [2, 7, 0, 1, 15, 16, 31, 75]
 AUX_TICK = 10
 TURN_FILTER = (0.4182754168, -0.3573573609, -0.9390819441)
@@ -142,13 +142,14 @@ class TurnFilter:
 
 
 class BalanceObservations:
-    def __init__(self, model, arms):
+    def __init__(self, model, arms, imu=None):
         self.arm_angle = ArmAngle(model) if arms else None
         d = mujoco.MjData(model)
         mujoco.mj_kinematics(model, d)
         base = model.body("base").id
         axle = d.xpos[[model.body(f"{side}_wheel").id for side in WHEELS]].mean(0)
-        self.imu = d.xmat[base].reshape(3, 3).T @ (axle - d.xpos[base]) + IMU_OFFSET
+        self.sensor = imu or ImuSensor()
+        self.imu = d.xmat[base].reshape(3, 3).T @ (axle - d.xpos[base]) + self.sensor.offset
         self.hall = HallEstimator()
         self.estimator = StateEstimator()
         self.aux = AuxEstimator()
@@ -189,6 +190,7 @@ class BalanceObservations:
         accel = specific_force(rotation, velocity, self.previous[0])
         imu_accel = specific_force(rotation, imu_velocity, self.previous[1])
         self.previous = velocity.copy(), imu_velocity.copy()
+        gyro, imu_accel = self.sensor(gyro, imu_accel)
         pitch, speed = self.estimator(
             gyro,
             imu_accel,
@@ -243,8 +245,8 @@ class BalanceObservations:
 class Controller:
     """One 5 ms base-board tick: lean state, actor selection, actor, turn filter."""
 
-    def __init__(self, model, arms):
-        self.observations = BalanceObservations(model, arms)
+    def __init__(self, model, arms, imu=None):
+        self.observations = BalanceObservations(model, arms, imu)
         self.balance = Actor("balance")
         self.lean = onnx_session("lean")
         self.lean_aux = onnx_session("lean_aux")

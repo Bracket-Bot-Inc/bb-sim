@@ -5,6 +5,7 @@ import numpy as np
 
 from .balance import TORQUE_NM, Controller
 from .config import ARM_JOINTS, ASSETS, LEAN_SETTLE_S, POLICY_INPUTS, WHEELS
+from .imu import ImuSensor
 from .policy import WheelMotor
 
 
@@ -20,6 +21,9 @@ class Simulation:
         ideal_wheels=False,
         start_pitch=0.0,
         wall_distance=0.32,
+        imu_temp_offset=0.0,
+        gyro_bias=(0.0, 0.0, 0.0),
+        seed=0,
     ):
         self.kind = kind
         spec = mujoco.MjSpec.from_file(str(ASSETS / f"{kind}.xml"))
@@ -57,6 +61,7 @@ class Simulation:
         self.arm_motion = arm_motion
         self.ideal_wheels = ideal_wheels
         self.start_pitch = np.deg2rad(start_pitch)
+        self.imu = dict(temp_offset=imu_temp_offset, gyro_bias=gyro_bias, seed=seed)
         self.reset()
 
     def reset(self):
@@ -74,7 +79,7 @@ class Simulation:
             bottoms.append(d.geom_xpos[i, 2] - extent)
         d.qpos[2] = 0.004 - min(bottoms)
         mujoco.mj_forward(m, d)
-        self.controller = Controller(m, arms=self.kind == "arms")
+        self.controller = Controller(m, arms=self.kind == "arms", imu=ImuSensor(**self.imu))
         self.pending_torques = None
         for motor in self.motors:
             motor.reset()

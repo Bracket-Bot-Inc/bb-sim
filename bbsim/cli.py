@@ -95,6 +95,16 @@ def main():
     p.add_argument(
         "--start-pitch", type=finite, default=0.0, help="Initial pitch perturbation in degrees"
     )
+    p.add_argument(
+        "--imu-temp-offset",
+        type=finite,
+        default=0.0,
+        help="Degrees C the IMU is from the temperature its gyro was calibrated at",
+    )
+    p.add_argument(
+        "--pitch-gyro-bias", type=finite, default=0.0, help="Extra pitch-gyro bias, deg/s"
+    )
+    p.add_argument("--seed", type=int, default=0, help="Sensor noise seed")
     p.add_argument("--report", type=Path, help="Write rollout summary JSON")
     p.add_argument("--screenshot", type=Path, help="Save final frame as PNG")
     p.add_argument(
@@ -123,6 +133,9 @@ def main():
         terrain=a.terrain,
         ideal_wheels=a.ideal_wheels,
         start_pitch=a.start_pitch,
+        imu_temp_offset=a.imu_temp_offset,
+        gyro_bias=(0.0, np.deg2rad(a.pitch_gyro_bias), 0.0),
+        seed=a.seed,
     )
     duration = a.duration if a.duration is not None else (20 if a.headless else float("inf"))
     trace = dict(time=[], qpos=[], qvel=[], obs=[], action=[])
@@ -159,6 +172,9 @@ def main():
         arm_motion=sim.arm_motion,
         mujoco_version=mujoco.__version__,
         lean_angle_deg=sim.lean_degrees,
+        imu_temp_offset_c=a.imu_temp_offset,
+        gyro_bias_dps=np.rad2deg(sim.controller.observations.sensor.gyro_bias).tolist(),
+        seed=a.seed,
     )
     if a.screenshot:
         screenshot(sim, a.screenshot)
