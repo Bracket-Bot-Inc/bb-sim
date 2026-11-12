@@ -133,7 +133,7 @@
         <geom name="right_wheel_tire__right_wheel_tire" pos="-0.00696893 0.0113019 0.133" quat="0.707125 1.82818e-06 -1.61742e-06 0.707089" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.301961 0.301961 0.301961 1" mesh="Right_Wheel_Tire__Right_Wheel_Tire" />
         <geom name="right_wheel_col" size="0.0846 0.025" pos="-5.171220325380059e-07 -1.195664943032925e-07 -0.02792992357800139" type="cylinder" group="3" rgba="0.2 0.2 0.2 0" />
       </body>
-      <body name="lj0_link" pos="-0.000240628479672 0.0274999999999 1.35157789275" quat="0.999999999995 2.65358463459e-06 1.83660292985e-06 1.42623287765e-07">
+      <body name="lj0_link" pos="-3.82328574474e-05 0.0274999821605 1.35152223445" quat="0.999999999995 2.41739634518e-06 1.83658946783e-06 1.42625552063e-07">
         <inertial pos="-0.00112095772478 0.0451769565162 -0.0613611278592" mass="0.750304" fullinertia="0.001808088859 0.00176440501698 0.000551896985863 -1.16701792183e-05 7.25064967503e-06 4.64264887528e-05" />
         <joint name="lj0" pos="0 0 0" axis="0 0 1" type="slide" springref="100" stiffness="0.1267" range="-1.03044 0" actuatorfrcrange="-100 100" />
         <geom name="l_shoulder__shoulder" pos="0.0112151 -0.0286011 -1.35824" quat="1.03411553555e-13 -1 -0 -0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="1 1 1 1" mesh="Shoulder__Shoulder_Mirrored" />
@@ -181,7 +181,7 @@
           </body>
         </body>
       </body>
-      <body name="rj0_link" pos="-0.000240612791373 -0.0274999999999 1.35157774681" quat="0.999999999998 4.63464638341e-12 1.83660255139e-06 1.42623387139e-07">
+      <body name="rj0_link" pos="-3.82171688515e-05 -0.0275000178393 1.35152211449" quat="0.999999999998 -2.36183654759e-07 1.83658908937e-06 1.42625651402e-07">
         <inertial pos="-0.00112095772478 -0.0451769565162 -0.0613611278592" mass="0.750304" fullinertia="0.001808088859 0.00176440501698 0.000551896985863 1.16701792182e-05 7.25064967503e-06 -4.64264887524e-05" />
         <joint name="rj0" pos="0 0 0" axis="0 0 1" type="slide" springref="100" stiffness="0.1267" range="-1.03044 0" actuatorfrcrange="-100 100" />
         <geom name="shoulder__shoulder" pos="0.0112151 0.0286011 -1.35824" quat="1.03411553555e-13 -1 -0 -0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="1 1 1 1" mesh="Shoulder__Shoulder" />

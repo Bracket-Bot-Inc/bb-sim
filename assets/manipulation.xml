@@ -121,7 +121,7 @@
         <geom name="right_wheel_tire__right_wheel_tire" pos="-0.00696893 0.0113019 0.133" quat="0.707125 1.82818e-06 -1.61742e-06 0.707089" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.301961 0.301961 0.301961 1" mesh="Right_Wheel_Tire__Right_Wheel_Tire" />
         <geom name="right_wheel_col" size="0.0846 0.025" pos="-5.171220325380059e-07 -1.195664943032925e-07 -0.02792992357800139" type="cylinder" group="3" rgba="0.2 0.2 0.2 0" />
       </body>
-      <body name="lj0_link" pos="-0.000240628479672 0.0274999999999 1.35157789275" quat="0.999999999995 2.65358463459e-06 1.83660292985e-06 1.42623287765e-07">
+      <body name="lj0_link" pos="-3.82328574474e-05 0.0274999821605 1.35152223445" quat="0.999999999995 2.41739634518e-06 1.83658946783e-06 1.42625552063e-07">
         <inertial pos="-0.00112091626 0.0451766315 -0.0613615136" quat="0.994485281 -0.0282033872 -0.00328066886 -0.10095956" mass="0.750304" diaginertia="1.25706075 1.25700266 0.000559879281" />
         <joint name="lj0" pos="0 0 0" axis="0 0 1" type="slide" range="-0.954187512 -0" damping="15.9593517" frictionloss="126.195622" armature="2.79594368" />
         <geom name="l_shoulder__shoulder" pos="0.0112151 -0.0286011 -1.35824" quat="1.03411553555e-13 -1 -0 -0" type="mesh" contype="1" conaffinity="4" group="1" density="0" rgba="1 1 1 1" mesh="Shoulder__Shoulder_Mirrored" />
@@ -226,7 +226,7 @@
           </body>
         </body>
       </body>
-      <body name="rj0_link" pos="-0.000240612791373 -0.0274999999999 1.35157774681" quat="0.999999999998 4.63464638341e-12 1.83660255139e-06 1.42623387139e-07">
+      <body name="rj0_link" pos="-3.82171688515e-05 -0.0275000178393 1.35152211449" quat="0.999999999998 -2.36183654759e-07 1.83658908937e-06 1.42625651402e-07">
         <inertial pos="-0.00112095772 -0.0451769565 -0.0613611279" quat="0.994485384 0.0282007473 -0.003280409 0.100959285" mass="0.750304" diaginertia="1.25706075 1.25700266 0.000559879281" />
         <joint name="rj0" pos="0 0 0" axis="0 0 1" type="slide" range="-0.954187512 0" damping="15.9593517" frictionloss="126.195622" armature="2.79594368" />
         <geom name="shoulder__shoulder" pos="0.0112151 0.0286011 -1.35824" quat="1.03411553555e-13 -1 -0 -0" type="mesh" contype="1" conaffinity="4" group="1" density="0" rgba="1 1 1 1" mesh="Shoulder__Shoulder" />
