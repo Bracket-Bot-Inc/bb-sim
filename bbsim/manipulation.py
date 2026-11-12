@@ -186,7 +186,7 @@ class Manipulation:
         dt = self.model.opt.timestep
         self.data.ctrl[self.actuators], self.data.qfrc_applied[self.lift_dofs] = self.servos(
             self.command, joints, self.data.qvel[self.dofs]
-``        )
+        )
         grip_target = self.grip_range[:, 0] + self.opening * np.diff(self.grip_range, axis=1)[:, 0]
         self.data.ctrl[self.grippers] += np.clip(
             grip_target - self.data.ctrl[self.grippers], -2 * dt, 2 * dt
