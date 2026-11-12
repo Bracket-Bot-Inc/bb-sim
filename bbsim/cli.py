@@ -75,8 +75,8 @@ def main():
     p.add_argument(
         "--lean-angle",
         type=finite,
-        default=3.0,
-        help="Lean angle in degrees, 1–15 (requested 3 s in)",
+        default=4.0,
+        help="Lean angle in degrees, 4–15 (requested 3 s in)",
     )
     p.add_argument(
         "--wall-distance", type=finite, default=0.32, help="Lean table slab center X, metres"
@@ -103,8 +103,8 @@ def main():
     a = p.parse_args()
     if a.duration is not None and a.duration <= 0:
         p.error("--duration must be positive")
-    if not 1 <= a.lean_angle <= 15:
-        p.error("--lean-angle must be between 1 and 15 degrees")
+    if not 4 <= a.lean_angle <= 15:
+        p.error("--lean-angle must be between 4 and 15 degrees")
     if a.arm_motion and a.policy != "arms":
         p.error("--arm-motion requires the arms policy; terrain/lean use welded arms")
     if abs(a.velocity) > 1 or abs(a.yaw) > 2:

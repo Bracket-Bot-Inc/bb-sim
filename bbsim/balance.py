@@ -13,8 +13,6 @@ WHEEL_SIGNS = np.array([-1.0, 1.0])  # forward-positive [left, right]
 WHEEL_RADIUS = 0.0825
 CMD_INT_CLAMP = 0.1
 IMU_OFFSET = np.array([0.04, 0.0, 0.0])  # from the axle, base frame
-ATTITUDE_GAIN = 0.012
-ATTITUDE_GATE = 0.25
 AUX_COLUMNS = [2, 7, 0, 1, 15, 16, 31, 75]
 AUX_TICK = 10
 TURN_FILTER = (0.4182754168, -0.3573573609, -0.9390819441)
@@ -53,64 +51,29 @@ def specific_force(rotation, velocity, previous):
     return rotation.T @ ((velocity - previous) / DT + [0.0, 0.0, GRAVITY])
 
 
-class AttitudeFilter:
-    def __init__(self, quat):
-        self.q = np.asarray(quat, float) / np.linalg.norm(quat)
-
-    def update(self, gyro, accel):
-        q0, q1, q2, q3 = self.q
-        gx, gy, gz = gyro
-        qd = 0.5 * np.array(
-            [
-                -q1 * gx - q2 * gy - q3 * gz,
-                q0 * gx + q2 * gz - q3 * gy,
-                q0 * gy - q1 * gz + q3 * gx,
-                q0 * gz + q1 * gy - q2 * gx,
-            ]
-        )
-        norm = np.linalg.norm(accel)
-        if norm > 1e-6 and abs(norm - GRAVITY) <= ATTITUDE_GATE:
-            ax, ay, az = accel / norm
-            f1 = 2 * (q1 * q3 - q0 * q2) - ax
-            f2 = 2 * (q0 * q1 + q2 * q3) - ay
-            f3 = 2 * (0.5 - q1 * q1 - q2 * q2) - az
-            s = np.array(
-                [
-                    -2 * q2 * f1 + 2 * q1 * f2,
-                    2 * q3 * f1 + 2 * q0 * f2 - 4 * q1 * f3,
-                    -2 * q0 * f1 + 2 * q3 * f2 - 4 * q2 * f3,
-                    2 * q1 * f1 + 2 * q2 * f2,
-                ]
-            )
-            qd -= ATTITUDE_GAIN * s / max(np.linalg.norm(s), 1e-12)
-        self.q = self.q + qd * DT
-        self.q /= np.linalg.norm(self.q)
-
-    def pitch(self):
-        q0, q1, q2, q3 = self.q
-        g0 = 2 * (q1 * q3 - q0 * q2)
-        g1 = 2 * (q0 * q1 + q2 * q3)
-        g2 = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3
-        return float(np.arctan2(-g0, np.hypot(g1, g2)))
-
-
 class StateEstimator:
+    """The pitch / speed estimator; its own pitch is the only pitch."""
+
     def __init__(self):
         self.session = onnx_session("balance_state")
         self.state = np.zeros((1, self.session.get_inputs()[0].shape[1]), np.float32)
         self.reset = True
+        self.pitch = None
 
-    def __call__(self, pitch, gyro, accel, wheel, velocity, action):
+    def __call__(self, gyro, accel, wheel, velocity, action):
+        if self.pitch is None:  # seed from the accelerometer's tilt (a still robot)
+            self.pitch = float(np.arctan2(-accel[0], accel[2]))
         inputs = dict(gyro=gyro, accel=accel, wheel=wheel, vel=velocity, action=action)
         feed = {k: np.asarray(v, np.float32).reshape(1, -1) for k, v in inputs.items()}
         feed.update(
             state=self.state,
-            pitch_in=np.array([pitch], np.float32),
+            pitch_in=np.array([self.pitch], np.float32),
             reset=np.array([float(self.reset)], np.float32),
         )
-        self.state, pitch, speed, _, _ = self.session.run(None, feed)
+        self.state, _, speed, pitch, _ = self.session.run(None, feed)
         self.reset = False
-        return float(pitch[0]), float(speed[0])
+        self.pitch = float(pitch[0])
+        return self.pitch, float(speed[0])
 
 
 class AuxEstimator:
@@ -189,7 +152,6 @@ class BalanceObservations:
         self.hall = HallEstimator()
         self.estimator = StateEstimator()
         self.aux = AuxEstimator()
-        self.attitude = None
         self.previous = None  # last base / IMU-point world velocities
         self.actions = np.zeros((3, 2))
         self.applied = np.zeros(2)
@@ -223,15 +185,11 @@ class BalanceObservations:
             wheel = wheel_vel
         imu_velocity = velocity + np.cross(rotation @ gyro, rotation @ self.imu)
         if first:
-            self.attitude = AttitudeFilter(quat)
             self.previous = velocity.copy(), imu_velocity.copy()
         accel = specific_force(rotation, velocity, self.previous[0])
         imu_accel = specific_force(rotation, imu_velocity, self.previous[1])
         self.previous = velocity.copy(), imu_velocity.copy()
-        if not first:
-            self.attitude.update(gyro, accel)
         pitch, speed = self.estimator(
-            self.attitude.pitch(),
             gyro,
             imu_accel,
             wheel_pos * WHEEL_SIGNS,
@@ -376,9 +334,9 @@ class Controller:
         ideal_wheels=False,
     ):
         o = self.observations
-        pitch = (
-            o.attitude.pitch() if o.attitude else float(np.arctan2(-rotation[2, 0], rotation[2, 2]))
-        )
+        pitch = o.estimator.pitch  # the estimator's pitch from the last tick, as on the board
+        if pitch is None:
+            pitch = float(np.arctan2(-rotation[2, 0], rotation[2, 2]))
         travel = 0.5 * WHEEL_RADIUS * np.sum(wheel_pos * WHEEL_SIGNS)
         self._lean_update(lean_request, lean_degrees, pitch, travel, o.forward_speed)
         lean_input = self.lean_angle / LEAN_MAX_DEG if self.lean_active else 0.0

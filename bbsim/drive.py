@@ -97,7 +97,7 @@ class DriveControls:
             )
         elif action in ("angle-", "angle+"):
             self.lean_angle = float(
-                np.clip(self.lean_angle + (1 if action.endswith("+") else -1), 1, 15)
+                np.clip(self.lean_angle + (1 if action.endswith("+") else -1), 4, 15)
             )
             self._apply_mode()
         self.update()

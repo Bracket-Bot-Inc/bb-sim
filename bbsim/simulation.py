@@ -14,7 +14,7 @@ class Simulation:
         kind="arms",
         velocity=0.0,
         yaw=0.0,
-        lean_degrees=3.0,
+        lean_degrees=4.0,
         arm_motion=False,
         terrain="flat",
         ideal_wheels=False,

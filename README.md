@@ -34,7 +34,7 @@ The first run installs Python 3.12 and the locked dependencies automatically.
 | --- | --- | --- |
 | `arms` | Balance policy that handles moving arms. **M** toggles a reach demo. | `uv run bbsim arms` |
 | `terrain` | Balance on flat ground, low bumps, or a 3° slope. Arms stay at the training pose. | `uv run bbsim terrain --terrain bumps` |
-| `lean` | Lean into a table edge at 1–15°. **L** toggles the table; **[** and **]** change the angle. | `uv run bbsim lean` |
+| `lean` | Lean into a table edge at 4–15°. **L** toggles the table; **[** and **]** change the angle. | `uv run bbsim lean` |
 | `manipulation` | Fixed base with the robot's arm IK. Grab the block or the cylinder. | `uv run bbsim manipulation` |
 
 ## Controls

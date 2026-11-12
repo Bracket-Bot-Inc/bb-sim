@@ -1,4 +1,4 @@
-"""Fixed-base arm manipulation with the teleop app's IK and physical gripper contacts."""
+"""Fixed-base arm manipulation with the arm IK, the arm boards' servos and physical gripper contacts."""
 
 import argparse
 from xml.etree import ElementTree as ET
@@ -8,8 +8,43 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from .config import ASSETS
-from .ik import DT, ArmIK
+from .ik import HALF_S, ArmIK
 from .policy import onnx_session
+
+
+class ArmServos:
+    """Both arms' servo path, one physics step at a time: the arm motors' torques and the lifts'
+    counterbalance forces from the commands and the measured joints."""
+
+    def __init__(self, model):
+        self.session = onnx_session("arm_servos")
+        self.dt = np.array([model.opt.timestep], np.float32)
+        self.depth = next(i.shape[0] for i in self.session.get_inputs() if i.name == "ring")
+
+    def reset(self, q):
+        q = np.ravel(q).astype(np.float32)
+        self.state = dict(
+            ring=np.tile(q, (self.depth, 1)),
+            setpoint=q.copy(),
+            speed=np.zeros(14, np.float32),
+            integ=np.zeros(2, np.float32),
+            previous=q[[0, 7]].copy(),
+            since_moved=np.zeros(2, np.float32),
+            since_tick=np.ones(2, np.float32),
+        )
+
+    def __call__(self, command, q, qd):
+        feed = dict(
+            dt=self.dt,
+            command=np.ravel(command).astype(np.float32),
+            q=np.ravel(q).astype(np.float32),
+            qd=np.ravel(qd).astype(np.float32),
+            **self.state,
+        )
+        names = [o.name for o in self.session.get_outputs()]
+        out = dict(zip(names, self.session.run(None, feed)))
+        self.state = {k: out[f"{k}_out"] for k in self.state}
+        return out["torque"].reshape(2, 7), out["lift_force"]
 
 
 class Manipulation:
@@ -57,35 +92,43 @@ class Manipulation:
             [[self.model.joint(f"{side}j{i}").id for i in range(7)] for side in "lr"]
         )
         self.qpos = self.model.jnt_qposadr[self.joints]
+        self.dofs = self.model.jnt_dofadr[self.joints]
         self.actuators = np.array(
             [[self.model.actuator(f"{side}j{i}").id for i in range(7)] for side in "lr"]
         )
         self.grippers = np.array([self.model.actuator(f"{side}_grip").id for side in "lr"])
         self.grip_range = self.model.actuator_ctrlrange[self.grippers]
         self.sites = [self.model.site(f"{side}_eef").id for side in "lr"]
+        self.lift_dofs = self.model.jnt_dofadr[self.joints[:, 0]]
         session = onnx_session("ik")
         self.solvers = [ArmIK(self.model, side, session) for side in "lr"]
+        self.servos = ArmServos(self.model)
         self.reset()
 
     def reset(self):
         mujoco.mj_resetData(self.model, self.data)
         self.targets = np.array([[0.25, 0.20, 0.60, 180, 0, 0], [0.25, -0.20, 0.60, 180, 0, 0]])
         self.opening = np.ones(2)
-        self.command = np.zeros((2, 7))
         self.failed = False
         self.ticks = 0
+        start = np.zeros((2, 7))
         for arm, solver in enumerate(self.solvers):
-            solver.reset(np.zeros(7))
+            # Start where the IK settles on the first targets (20 s on ideal joints).
+            q = np.clip(np.zeros(7), *self.model.jnt_range[self.joints[arm]].T)
+            solver.reset(q)
             quaternion = Rotation.from_euler("xyz", self.targets[arm, 3:], degrees=True).as_quat()
-            # Half a second of a held target, ending at t = 0.
-            for k in range(30, -1, -1):
-                self.command[arm] = solver.solve(self.targets[arm, :3], quaternion, -k * DT)
-            self.data.qpos[self.qpos[arm]] = self.command[arm]
+            for _ in range(round(20 * solver.rate)):
+                _, q = solver.tick(q, self.targets[arm, :3], quaternion)
+            start[arm] = q
+            solver.reset(q)
+            self.data.qpos[self.qpos[arm]] = q
             for i in range(2):
                 joint = self.model.joint(f"{'lr'[arm]}_grip{i}")
                 self.data.qpos[joint.qposadr] = self.grip_range[arm, 1]
-        self.solution = self.command.copy()
-        self.data.ctrl[self.actuators] = self.command
+        self.command, self.reference = start.copy(), start.copy()
+        self.next_tick, self.full_at = 0.0, None
+        self.servos.reset(start)
+        self.data.ctrl[self.actuators] = 0.0
         self.data.ctrl[self.grippers] = self.grip_range[:, 1]
         mujoco.mj_forward(self.model, self.data)
 
@@ -124,16 +167,26 @@ class Manipulation:
     def step(self):
         if self.failed:
             return
-        if self.ticks % 10 == 0:
+        t = self.data.time
+        joints = self.data.qpos[self.qpos]
+        if t >= self.next_tick - 1e-9:
+            # A policy tick: the half-way goal now, the new reference HALF_S later.
             for arm, solver in enumerate(self.solvers):
                 quaternion = Rotation.from_euler(
                     "xyz", self.targets[arm, 3:], degrees=True
                 ).as_quat()
-                self.solution[arm] = solver.solve(self.targets[arm, :3], quaternion, self.data.time)
+                self.command[arm], self.reference[arm] = solver.tick(
+                    joints[arm], self.targets[arm, :3], quaternion
+                )
+            self.full_at = t + HALF_S
+            self.next_tick += 1 / self.solvers[0].rate
+        elif self.full_at is not None and t >= self.full_at - 1e-9:
+            self.command[:] = self.reference
+            self.full_at = None
         dt = self.model.opt.timestep
-        speed = np.array([0.18, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2]) * dt
-        self.command += np.clip(self.solution - self.command, -speed, speed)
-        self.data.ctrl[self.actuators] = self.command
+        self.data.ctrl[self.actuators], self.data.qfrc_applied[self.lift_dofs] = self.servos(
+            self.command, joints, self.data.qvel[self.dofs]
+``        )
         grip_target = self.grip_range[:, 0] + self.opening * np.diff(self.grip_range, axis=1)[:, 0]
         self.data.ctrl[self.grippers] += np.clip(
             grip_target - self.data.ctrl[self.grippers], -2 * dt, 2 * dt
